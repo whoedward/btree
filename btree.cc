@@ -365,7 +365,41 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-  // WRITE ME
+  BTreeNode b;
+  ERROR_T rc;
+  //SIZE_T offset;
+  //KEY_T testkey;
+  //SIZE_T ptr;
+  SIZE_T node;
+
+  rc = b.Unserialize(buffercache,node);
+
+  if (rc!=ERROR_NOERROR) {
+    return rc;
+  }
+
+  switch(b.info.nodetype){
+    case BTREE_ROOT_NODE:
+    case BTREE_INTERIOR_NODE:
+    case BTREE_LEAF_NODE:
+    break;
+  }
+
+  cout << b;
+  //initialize a stack that holds nodes
+  //
+
+
+  //traverse the tree, unserilizing nodes and inserting them, until we reach a leaf nodes
+
+  //upon reaching the leaf node, attempt to insert the key, this might be hard
+  //
+
+
+  //if the leaf is full, allocate a new node, get its disk pointer.
+  //split the full leaf keys in have, putting the right hand side in the new one
+  //promote the key that you have split on, and insert the key and pointer into the parent
+  //by popping it off the stack.  
   return ERROR_UNIMPL;
 }
   
