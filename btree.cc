@@ -368,6 +368,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   BTreeNode root;
   ERROR_T rc;
   SIZE_T offset;
+  SIZE_T reverseoffset;
   KEY_T testkey;
   SIZE_T ptr;
   KeyValuePair kvpair = KeyValuePair(key,value);
@@ -421,12 +422,13 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
       //did we find the fisrt key larger?
       if(key<testkey || key==testkey){
-        rc = root.GetPtr(offset,ptr);
-        if (rc != ERROR_NOERROR) { return rc; }
         break;
       }
     }
-
+    
+    rc = root.GetPtr(offset,ptr);
+    if (rc != ERROR_NOERROR) {return rc; }
+    
     root.Unserialize(buffercache,ptr);
   }
   
@@ -445,14 +447,32 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
   //get the offset of where to put the key
   
-  if(root.info.numkeys > root.info.GetNumSlotsAsLeaf()){
+  if(root.info.numkeys >= root.info.GetNumSlotsAsLeaf()){
     //the leaf is full so we have to split it
     return ERROR_UNIMPL;
   } else {
     //leaf has room for at least
     for (offset = 0; offset < root.info.numkeys; offset++) {
       rc = root.GetKey(offset,testkey);
+      if(key < testkey || key == testkey) {
+        if (key == testkey) {return ERROR_CONFLICT;}
+        break;
+      }
     }
+    cout << "Offset is: " << offset << "\n\n";
+    //now we push all the stuff from offset 1 over to the right
+    root.info.numkeys += 1;
+    for (reverseoffset = root.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
+      //shift keyvalue pairs over til we got the slot where we will place the key
+      rc = root.GetKeyVal(reverseoffset-1,kvpair);
+      if (rc != ERROR_NOERROR) {return rc;}
+      rc = root.SetKeyVal(reverseoffset,kvpair);
+      if (rc != ERROR_NOERROR) {return rc;}
+    }
+      root.SetKey(offset,key);
+      root.SetVal(offset,value);
+      root.Serialize(buffercache,ptr);
+      return ERROR_NOERROR;
   }
 
   //if the leaf is full, allocate a new node, get its disk pointer.
