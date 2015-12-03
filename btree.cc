@@ -553,6 +553,7 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
   if (display_type==BTREE_DEPTH_DOT) { 
     o << "}\n";
   }
+  SanityCheck();
   return ERROR_NOERROR;
 }
 
@@ -560,9 +561,24 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 ERROR_T BTreeIndex::SanityCheck() const
 {
   // WRITE ME
+  BTreeNode root;
+  cout << "sanity checking" << endl;
+  //invariants
+  //1. every path from root to leaf is same length
+  //2. if node has n children, it has n-1 keys
+  //3. every node cept root is at LEAST half full
+  //4. elements stored in subtree must have key values that are between keys in parent node
+  //5. root has at least two children if it is not a leaf
+ //Start with rootnode and check if it is empty (aka first insert)
+  root.Unserialize(buffercache, superblock.info.rootnode); 
+  if(root.info.keysize == 0){
+     cout << "NOTHING IN THE ROOT BRUH" << endl;
+  }else{
+     cout << "we got someting in the root commander" << endl;
+     //isBalanced(root);
+  }
   return ERROR_UNIMPL;
-}
-  
+} 
 
 
 ostream & BTreeIndex::Print(ostream &os) const
