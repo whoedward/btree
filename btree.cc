@@ -407,11 +407,11 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
   //initialize a stack that holds nodes
   std::stack<BTreeNode> traversednodes;
-  cout << "Traversing the tree\n\n-----------------\n";
+  //cout << "Traversing the tree\n\n-----------------\n";
 
   //traverse the tree, unserilizing nodes and inserting them, until we reach a leaf node
   while(root.info.nodetype != BTREE_LEAF_NODE){
-    cout << root <<"\n";
+    //cout << root <<"\n";
     traversednodes.push(root);
     //get the next node to go to, which is the pointer before the first key that is larger
     //than the key we have
@@ -434,7 +434,8 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   
 
   //root is currently the laef node
-  cout << root << "\n\n";
+  //cout << root.info.numkeys << " of " << root.info.GetNumSlotsAsLeaf() << " used." << "\n\n";
+  //cout << root.info.GetNumSlotsAsInterior();
 
   //test printing the stack to make sure each node is difersnt
   //while(!traversednodes.empty())
@@ -449,7 +450,85 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   
   if(root.info.numkeys >= root.info.GetNumSlotsAsLeaf()){
     //the leaf is full so we have to split it
-    return ERROR_UNIMPL;
+    //allocate a new node
+    KEY_T promote;
+    SIZE_T newleafptr;
+    BTreeNode newleaf;
+    SIZE_T counter,othercounter;
+    othercounter = 0;
+    rc = AllocateNode(newleafptr);
+    if(rc != ERROR_NOERROR) {return rc;}
+
+    newleaf.Unserialize(buffercache,newleafptr); 
+    //copy half of the keys from
+    //split the keys into left and right keys
+    SIZE_T leftsplit = root.info.numkeys / 2;
+    SIZE_T rightsplit = root.info.numkeys - leftsplit;
+    
+    newleaf.info.numkeys = rightsplit;
+
+    for (counter = leftsplit; counter < root.info.numkeys; counter++){
+      rc = root.GetKeyVal(counter,kvpair);
+      if (rc != ERROR_NOERROR) {return rc;}
+      rc = newleaf.SetKeyVal(othercounter,kvpair);
+      if (rc != ERROR_NOERROR) {return rc;}
+    }
+    
+    root.info.numkeys = leftsplit;
+    //between the two nodes, find out where to put the key val pair
+    
+    //todo
+    root.GetKey(root.info.numkeys-1,testkey);
+
+    if(key < testkey){
+      //insert in root
+      root.info.numkeys += 1;
+      for (offset = 0; offset < root.info.numkeys; offset++){
+        root.GetKey(offset,testkey);
+        if(testkey < key) {
+          break;
+        }
+      }
+
+      for (reverseoffset = root.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
+        //shift keyvalue pairs over til we got the slot where we will place the key
+        rc = root.GetKeyVal(reverseoffset-1,kvpair);
+        if (rc != ERROR_NOERROR) {return rc;}
+        rc = root.SetKeyVal(reverseoffset,kvpair);
+        if (rc != ERROR_NOERROR) {return rc;}
+      }
+      root.SetKey(offset,key);
+      root.SetVal(offset,value);
+      
+    } else {
+      //insert in newleaf
+      newleaf.info.numkeys += 1;
+      for (offset = 0; offset < root.info.numkeys; offset++){
+        root.GetKey(offset,testkey);
+        if(testkey < key) {
+          break;
+        }
+      }
+
+      for (reverseoffset = root.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
+        //shift keyvalue pairs over til we got the slot where we will place the key
+        rc = root.GetKeyVal(reverseoffset-1,kvpair);
+        if (rc != ERROR_NOERROR) {return rc;}
+        rc = root.SetKeyVal(reverseoffset,kvpair);
+        if (rc != ERROR_NOERROR) {return rc;}
+      }
+      root.SetKey(offset,key);
+      root.SetVal(offset,value);
+    }
+    
+
+    
+    newleaf.Serialize(buffercache,newleafptr);
+    root.Serialize(buffercache,ptr);
+    //upsert the newleaf ptr, and the key that you are promoting
+
+    root.GetKey(root.info.numkeys-1,promote);
+    return Upsert(newleafptr, promote, traversednodes);
   } else {
     //leaf has room for at least
     for (offset = 0; offset < root.info.numkeys; offset++) {
@@ -459,7 +538,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
         break;
       }
     }
-    cout << "Offset is: " << offset << "\n\n";
+    //cout << "Offset is: " << offset << "\n\n";
     //now we push all the stuff from offset 1 over to the right
     root.info.numkeys += 1;
     for (reverseoffset = root.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
@@ -480,6 +559,14 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   //promote the key that you have split on, and insert the key and pointer into the parent
   //by popping it off the stack.  
   return ERROR_UNIMPL;
+}
+
+ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<BTreeNode> traversed)
+{
+   BTreeNode parent;
+
+   parent = traversed.top();
+   return ERROR_UNIMPL;
 }
   
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)

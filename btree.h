@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <stack>
 
 #include "global.h"
 #include "block.h"
@@ -106,6 +107,8 @@ public:
   // return ERROR_CONFLICT if the key already exists and it's a unique index
   ERROR_T Insert(const KEY_T &key, const VALUE_T &value);
   
+  ERROR_T Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<BTreeNode> traversed);
+
   // given a key, return the offset of where it can be found/is found if leaf
   SIZE_T  FindOffsetFromKey(const KEY_T &key);
     
