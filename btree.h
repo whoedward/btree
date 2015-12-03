@@ -106,6 +106,9 @@ public:
   // return ERROR_CONFLICT if the key already exists and it's a unique index
   ERROR_T Insert(const KEY_T &key, const VALUE_T &value);
   
+  // given a key, return the offset of where it can be found/is found if leaf
+  SIZE_T  FindOffsetFromKey(const KEY_T &key);
+    
   // return zero on success
   // return ERROR_NONEXISTENT  if the key doesn't exist
   // return ERROR_SIZE if the key or value are the wrong size for this index

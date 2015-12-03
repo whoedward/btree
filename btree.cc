@@ -1,6 +1,6 @@
 #include <assert.h>
 #include "btree.h"
-
+#include <stack>
 KeyValuePair::KeyValuePair()
 {}
 
@@ -365,36 +365,95 @@ ERROR_T BTreeIndex::Lookup(const KEY_T &key, VALUE_T &value)
 
 ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 {
-  BTreeNode b;
+  BTreeNode root;
   ERROR_T rc;
-  //SIZE_T offset;
-  //KEY_T testkey;
-  //SIZE_T ptr;
-  SIZE_T node;
+  SIZE_T offset;
+  KEY_T testkey;
+  SIZE_T ptr;
+  KeyValuePair kvpair = KeyValuePair(key,value);
 
-  rc = b.Unserialize(buffercache,node);
+  //Start with rootnode and check if it is empty (aka first insert)
+  root.Unserialize(buffercache, superblock.info.rootnode);  
 
-  if (rc!=ERROR_NOERROR) {
-    return rc;
+  if(root.info.numkeys == 0) {
+    BTreeNode child(BTREE_LEAF_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+
+    SIZE_T rootleft;
+    SIZE_T rootright;
+    
+    rc = AllocateNode(rootleft);
+    if(rc != ERROR_NOERROR) {return rc;}
+    rc = AllocateNode(rootright);
+    if(rc != ERROR_NOERROR) {return rc;}
+    
+    child.Serialize(buffercache, rootright);
+
+    //im pretty sure the first key goes into the left?
+    child.info.numkeys += 1;
+    child.SetKeyVal(0, kvpair);
+    child.Serialize(buffercache, rootleft);
+    root.info.numkeys += 1;
+
+    //the key that is inserted is that the keys less than it go to the left
+    root.SetKey(0, key);
+    root.SetPtr(0, rootleft);
+    root.SetPtr(1, rootright);
+    root.Serialize(buffercache, superblock.info.rootnode);
+
+    return ERROR_NOERROR;
   }
 
-  switch(b.info.nodetype){
-    case BTREE_ROOT_NODE:
-    case BTREE_INTERIOR_NODE:
-    case BTREE_LEAF_NODE:
-    break;
-  }
 
-  cout << b;
   //initialize a stack that holds nodes
-  //
+  std::stack<BTreeNode> traversednodes;
+  cout << "Traversing the tree\n\n-----------------\n";
 
+  //traverse the tree, unserilizing nodes and inserting them, until we reach a leaf node
+  while(root.info.nodetype != BTREE_LEAF_NODE){
+    cout << root <<"\n";
+    traversednodes.push(root);
+    //get the next node to go to, which is the pointer before the first key that is larger
+    //than the key we have
+    for(offset = 0; offset < root.info.numkeys; offset++) {
+      rc = root.GetKey(offset,testkey);
+      if(rc != ERROR_NOERROR) {return rc;}
+      
 
-  //traverse the tree, unserilizing nodes and inserting them, until we reach a leaf nodes
+      //did we find the fisrt key larger?
+      if(key<testkey || key==testkey){
+        rc = root.GetPtr(offset,ptr);
+        if (rc != ERROR_NOERROR) { return rc; }
+        break;
+      }
+    }
 
+    root.Unserialize(buffercache,ptr);
+  }
+  
+
+  //root is currently the laef node
+  cout << root << "\n\n";
+
+  //test printing the stack to make sure each node is difersnt
+  //while(!traversednodes.empty())
+ // {
+  //  cout << traversednodes.top();
+  //  cout << "\n\n";
+  //  traversednodes.pop();
+  //} 
   //upon reaching the leaf node, attempt to insert the key, this might be hard
-  //
 
+  //get the offset of where to put the key
+  
+  if(root.info.numkeys > root.info.GetNumSlotsAsLeaf()){
+    //the leaf is full so we have to split it
+    return ERROR_UNIMPL;
+  } else {
+    //leaf has room for at least
+    for (offset = 0; offset < root.info.numkeys; offset++) {
+      rc = root.GetKey(offset,testkey);
+    }
+  }
 
   //if the leaf is full, allocate a new node, get its disk pointer.
   //split the full leaf keys in have, putting the right hand side in the new one
