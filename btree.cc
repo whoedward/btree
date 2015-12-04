@@ -725,6 +725,10 @@ ERROR_T BTreeIndex::SanityCheck() const
 {
   // WRITE ME
   BTreeNode root;
+  BTreeNode tree_ptr;
+  SIZE_T i;
+  int height = 0;
+  int max_height = 0;
   cout << "sanity checking" << endl;
   //invariants
   //1. every path from root to leaf is same length
@@ -738,7 +742,7 @@ ERROR_T BTreeIndex::SanityCheck() const
      cout << "NOTHING IN THE ROOT BRUH" << endl;
   }else{
      cout << "we got someting in the root commander" << endl;
-     //isBalanced(root);
+     root.isBalanced(root,i,height,max_height );
   }
   return ERROR_UNIMPL;
 } 

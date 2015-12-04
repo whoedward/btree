@@ -90,7 +90,8 @@ struct BTreeNode {
   ERROR_T GetPtr(const SIZE_T offset, SIZE_T &p) const ;   // Gives the ith pointer (interior)
   ERROR_T GetVal(const SIZE_T offset, VALUE_T &v) const ; // Gives  the ith value (leaf)
   ERROR_T GetKeyVal(const SIZE_T offset, KeyValuePair &p) const; // Gives  the ith key value pair (leaf)
-
+  
+  int isBalanced(BTreeNode n, SIZE_T i, int height, int max_height); //sanity check for balanced tree
 
   ERROR_T SetKey(const SIZE_T offset, const KEY_T &k); // Writesthe ith key  (interior or leaf)
   ERROR_T SetPtr(const SIZE_T offset, const SIZE_T &p);   // Writes the ith pointer (interior)

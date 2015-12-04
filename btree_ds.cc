@@ -301,7 +301,16 @@ ERROR_T BTreeNode::SetKeyVal(const SIZE_T offset, const KeyValuePair &p)
   }
 }
 
+int BTreeNode::isBalanced(BTreeNode n, SIZE_T i, int height, int max_height){
+   cout << "isBalanced()" << endl;
+   if(n.info.nodetype == BTREE_LEAF_NODE){
+	return -1;	
+   }else{
+	
+   }
 
+   return -1;
+}
 
 
 ostream & BTreeNode::Print(ostream &os) const 
