@@ -503,22 +503,22 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
     } else {
       //insert in newleaf
       newleaf.info.numkeys += 1;
-      for (offset = 0; offset < root.info.numkeys; offset++){
-        root.GetKey(offset,testkey);
+      for (offset = 0; offset < newleaf.info.numkeys; offset++){
+        newleaf.GetKey(offset,testkey);
         if(testkey < key) {
           break;
         }
       }
 
-      for (reverseoffset = root.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
+      for (reverseoffset = newleaf.info.numkeys-1; reverseoffset >= offset && reverseoffset > 0; reverseoffset--){
         //shift keyvalue pairs over til we got the slot where we will place the key
-        rc = root.GetKeyVal(reverseoffset-1,kvpair);
+        rc = newleaf.GetKeyVal(reverseoffset-1,kvpair);
         if (rc != ERROR_NOERROR) {return rc;}
-        rc = root.SetKeyVal(reverseoffset,kvpair);
+        rc = newleaf.SetKeyVal(reverseoffset,kvpair);
         if (rc != ERROR_NOERROR) {return rc;}
       }
-      root.SetKey(offset,key);
-      root.SetVal(offset,value);
+      newleaf.SetKey(offset,key);
+      newleaf.SetVal(offset,value);
     }
     
 
@@ -528,6 +528,8 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
     //upsert the newleaf ptr, and the key that you are promoting
 
     root.GetKey(root.info.numkeys-1,promote);
+
+    cout << "\n\n" << root << "\n--------\n" << newleaf << "\n\n";
     return Upsert(newleafptr, promote, traversednodes);
   } else {
     //leaf has room for at least
@@ -551,6 +553,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
       root.SetKey(offset,key);
       root.SetVal(offset,value);
       root.Serialize(buffercache,ptr);
+      cout << root << "\n\n";
       return ERROR_NOERROR;
   }
 
@@ -564,6 +567,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<BTreeNode> traversed)
 {
    BTreeNode parent;
+
 
    parent = traversed.top();
    return ERROR_UNIMPL;
