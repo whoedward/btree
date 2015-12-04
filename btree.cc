@@ -406,13 +406,12 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
 
   //initialize a stack that holds nodes
-  std::stack<BTreeNode> traversednodes;
+  std::stack<SIZE_T> traversednodes;
   //cout << "Traversing the tree\n\n-----------------\n";
-
+  traversednodes.push(superblock.info.rootnode);
   //traverse the tree, unserilizing nodes and inserting them, until we reach a leaf node
   while(root.info.nodetype != BTREE_LEAF_NODE){
     //cout << root <<"\n";
-    traversednodes.push(root);
     //get the next node to go to, which is the pointer before the first key that is larger
     //than the key we have
     for(offset = 0; offset < root.info.numkeys; offset++) {
@@ -422,13 +421,14 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
       //did we find the fisrt key larger?
       if(key<testkey || key==testkey){
+        if (key == testkey) {return ERROR_CONFLICT;}
         break;
       }
     }
     
     rc = root.GetPtr(offset,ptr);
     if (rc != ERROR_NOERROR) {return rc; }
-    
+    traversednodes.push(ptr);
     root.Unserialize(buffercache,ptr);
   }
   
@@ -447,6 +447,16 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   //upon reaching the leaf node, attempt to insert the key, this might be hard
 
   //get the offset of where to put the key
+  //
+  
+
+  //new thing we need to check if the key exists in the leaf
+  SIZE_T leafcounter;
+  for(leafcounter = 0; leafcounter < root.info.numkeys; leafcounter++){
+    rc = root.GetKey(leafcounter, testkey);
+    if(rc != ERROR_NOERROR) {return rc;}
+    if(key == testkey) {return ERROR_CONFLICT;}
+  }
   
   if(root.info.numkeys >= root.info.GetNumSlotsAsLeaf()){
     //the leaf is full so we have to split it
@@ -477,7 +487,6 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
     root.info.numkeys = leftsplit;
     //between the two nodes, find out where to put the key val pair
     
-    //todo
     root.GetKey(root.info.numkeys-1,testkey);
 
     if(key < testkey){
@@ -564,13 +573,54 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
   return ERROR_UNIMPL;
 }
 
-ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<BTreeNode> traversed)
+ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_T> traversed)
 {
+   ERROR_T rc;
    BTreeNode parent;
+   SIZE_T counter, reverseoffset, oldkeyoffset, tempptr, parentptr;
+   KEY_T testkey, tempkey;
 
 
-   parent = traversed.top();
-   return ERROR_UNIMPL;
+   parentptr = traversed.top();
+   parent.Unserialize(buffercache,parentptr);
+   //first find out if the parent is full or not.
+   if (parent.info.numkeys >= parent.info.GetNumSlotsAsInterior()){
+     if(parent.info.nodetype == BTREE_ROOT_NODE) {
+        return ERROR_INSANE;
+        //return ERROR_UNIMPL;
+        //chances are that we have already serialized the nodes, so its too late to throw a normal error
+     } else {
+        //its an interior node
+        return ERROR_INSANE;
+     }
+   } else {
+     //not full, so we just find out where to stick the pointer and the key
+     //we can get the old pointer by getting the old key location, and set its key to our promotion
+     for(counter = 0; counter < parent.info.GetNumSlotsAsInterior(); counter++) {
+       rc = parent.GetKey(counter,testkey);
+       if (rc != ERROR_NOERROR) {return rc;}
+       if (key < testkey) {break;}  //found the location where the key should go
+     }
+     //counter now has the offset of the old key so now we shift stuff over to the right
+     
+     parent.info.numkeys += 1;
+     for(reverseoffset = parent.info.numkeys; reverseoffset > counter; reverseoffset--){
+       //shift all the ptr and keys up
+       rc = parent.GetKey(reverseoffset-1, tempkey);
+       rc = parent.SetKey(reverseoffset, tempkey);
+       rc = parent.GetPtr(reverseoffset-1, tempptr);
+       rc = parent.SetPtr(reverseoffset, tempptr);
+     }
+     
+     rc = parent.SetKey(reverseoffset,key);
+     rc = parent.SetPtr(reverseoffset,ptr);
+
+     parent.Serialize(buffercache,parentptr);
+     //now insert the new pointer and serialize the node.
+     
+     return ERROR_UNIMPL;
+   } 
+   return ERROR_INSANE;
 }
   
 ERROR_T BTreeIndex::Update(const KEY_T &key, const VALUE_T &value)
