@@ -538,7 +538,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
 
     root.GetKey(root.info.numkeys-1,promote);
 
-    cout << "\n\n" << root << "\n--------\n" << newleaf << "\n\n";
+    //cout << "\n\n" << root << "\n--------\n" << newleaf << "\n\n";
     return Upsert(newleafptr, promote, traversednodes);
   } else {
     //leaf has room for at least
@@ -562,7 +562,7 @@ ERROR_T BTreeIndex::Insert(const KEY_T &key, const VALUE_T &value)
       root.SetKey(offset,key);
       root.SetVal(offset,value);
       root.Serialize(buffercache,ptr);
-      cout << root << "\n\n";
+      //cout << root << "\n\n";
       return ERROR_NOERROR;
   }
 
@@ -577,7 +577,7 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
 {
    ERROR_T rc;
    BTreeNode parent;
-   SIZE_T counter, reverseoffset, oldkeyoffset, tempptr, parentptr;
+   SIZE_T counter, reverseoffset, tempptr, parentptr, numleftkeys, numrightkeys;
    KEY_T testkey, tempkey;
 
 
@@ -586,12 +586,13 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
    //first find out if the parent is full or not.
    if (parent.info.numkeys >= parent.info.GetNumSlotsAsInterior()){
      if(parent.info.nodetype == BTREE_ROOT_NODE) {
-        return ERROR_INSANE;
+        return ERROR_UNIMPL;
         //return ERROR_UNIMPL;
         //chances are that we have already serialized the nodes, so its too late to throw a normal error
      } else {
-        //its an interior node
-        return ERROR_INSANE;
+        //we need to split keys and pointers
+        numleftkeys = parent.info.numkeys / 2;
+        return ERROR_UNIMPL;
      }
    } else {
      //not full, so we just find out where to stick the pointer and the key
@@ -611,9 +612,10 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
        rc = parent.GetPtr(reverseoffset-1, tempptr);
        rc = parent.SetPtr(reverseoffset, tempptr);
      }
-     
+     rc = parent.SetPtr(reverseoffset+1, ptr);
      rc = parent.SetKey(reverseoffset,key);
-     rc = parent.SetPtr(reverseoffset,ptr);
+     //nooooo, just leave pointer alone
+     //rc = parent.SetPtr(reverseoffset,ptr);
 
      parent.Serialize(buffercache,parentptr);
      //now insert the new pointer and serialize the node.
