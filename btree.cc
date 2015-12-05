@@ -724,13 +724,7 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 ERROR_T BTreeIndex::SanityCheck() const
 {
   // WRITE ME
-  BTreeNode root;
-  BTreeNode tree_ptr;
-  SIZE_T i;
-  int height = 0;
-  int max_height = 0;
-  cout << "sanity checking" << endl;
-  //invariants
+  /*/invariants
   //1. every path from root to leaf is same length
   //2. if node has n children, it has n-1 keys
   //3. every node cept root is at LEAST half full
@@ -744,8 +738,91 @@ ERROR_T BTreeIndex::SanityCheck() const
      cout << "we got someting in the root commander" << endl;
      root.isBalanced(root,i,height,max_height );
   }
-  return ERROR_UNIMPL;
-} 
+*/
+//  BTreeNode root(BTREE_ROOT_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+  //root.Unserialize(buffercache, superblock.info.rootnode);
+  ERROR_T rc;
+  rc = SanityCheckHelper(superblock.info.rootnode);
+  return rc;
+}
+ 
+ERROR_T BTreeIndex::SanityCheckHelper(const SIZE_T &node) const{
+   cout << "helper" << endl;
+
+   ERROR_T rc;
+   SIZE_T offset = 0;
+   SIZE_T tree_ptr;
+   BTreeNode n;
+   KEY_T k1,k2;
+   VALUE_T val;
+
+   rc = n.Unserialize(buffercache,node);
+   if( rc != ERROR_NOERROR){
+       return rc;
+   }
+
+   //switch statements to check for type of node
+   switch(n.info.nodetype){
+        case BTREE_INTERIOR_NODE:{
+                for(offset; offset<n.info.numkeys+1;offset++){
+                        rc=n.GetKey(offset,k1);
+                        if(rc){
+                                return rc;
+                        }
+                        if(offset+1 < n.info.numkeys-1){
+                                rc = n.GetKey(offset+1,k2);
+                                if(k2 < k1){
+                                        //keys not in order
+                                }
+                        }
+                        rc = n.GetPtr(offset,tree_ptr);
+                        if(rc) {
+                                return rc;
+                        }
+                        //recurse
+                        return SanityCheckHelper(tree_ptr);
+                }
+
+                if(n.info.numkeys <= 0){
+                        return ERROR_NONEXISTENT;
+                }else{
+                        rc = n.GetPtr(n.info.numkeys,tree_ptr);
+                        if(rc){
+                                return rc;
+                        }
+                        //recurse
+                        return SanityCheckHelper(tree_ptr);
+                }
+                break;
+        }
+        case BTREE_LEAF_NODE:{
+		for(offset; offset<n.info.numkeys;offset++){
+			rc=n.GetKey(offset,k1);
+			if(rc){
+				return rc;
+			}
+			rc=n.GetVal(offset,val);
+			if(rc){
+				return rc;
+			}
+			if(offset+1 < n.info.numkeys){
+				rc=n.GetKey(offset+1,k2);
+				if(k2<k1){
+					//keys not in order
+				}
+	
+			}
+		}break;
+	}
+        case BTREE_ROOT_NODE:{}
+        default:
+                return ERROR_INSANE;
+                break;
+
+
+   }
+        return ERROR_NOERROR;
+}
 
 
 ostream & BTreeIndex::Print(ostream &os) const

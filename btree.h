@@ -100,7 +100,7 @@ public:
   // We expect you to tell us the number of your superblock, which
   // we will return to you on the next attach
   ERROR_T Detach(SIZE_T &initblock);
-  
+   
   // return zero on success
   // return ERROR_NOSPACE if you run out of disk space
   // return ERROR_SIZE if the key or value are the wrong size for this index
@@ -108,7 +108,7 @@ public:
   ERROR_T Insert(const KEY_T &key, const VALUE_T &value);
   
   ERROR_T Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_T> traversed);
-
+  ERROR_T SanityCheckHelper(const SIZE_T &node) const;
   // given a key, return the offset of where it can be found/is found if leaf
   SIZE_T  FindOffsetFromKey(const KEY_T &key);
     
