@@ -91,6 +91,7 @@ struct BTreeNode {
   ERROR_T GetVal(const SIZE_T offset, VALUE_T &v) const ; // Gives  the ith value (leaf)
   ERROR_T GetKeyVal(const SIZE_T offset, KeyValuePair &p) const; // Gives  the ith key value pair (leaf)
 
+  ERROR_T SanityCheckHelper(const SIZE_T &node) const;  
 
   ERROR_T SetKey(const SIZE_T offset, const KEY_T &k); // Writesthe ith key  (interior or leaf)
   ERROR_T SetPtr(const SIZE_T offset, const SIZE_T &p);   // Writes the ith pointer (interior)

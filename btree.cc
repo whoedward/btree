@@ -590,13 +590,93 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
         //need to make a new root node for upsert purposes
         BTreeNode newroot(BTREE_ROOT_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
         BTreeNode newinterior(BTREE_INTERIOR_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
-        rc = AllocateNode(newnode);
-        if (rc != ERROR_NOERROR) {return rc;}
+        rc = AllocateNode(newnode);        
+        if (rc != ERROR_NOERROR) {return rc; }
+        rc = AllocateNode(newrootptr);
+        if (rc != ERROR_NOERROR) {return rc; }
+
+        newroot.Unserialize(buffercache, newrootptr);
+        newinterior.Unserialize(buffercache, newnode);
+
+        //move half the keys from parent to new interior
+        numleftkeys = parent.info.numkeys / 2;
+        numrightkeys = parent.info.numkeys - numleftkeys;
         
-        
+        newinterior.info.numkeys = numrightkeys;
+        offset = 0;
+        for(counter = numleftkeys + 1; counter < parent.info.numkeys; counter++){
+          rc = parent.GetKey(counter, tempkey);
+          rc = parent.GetPtr(counter, tempptr);
+          rc = newinterior.SetKey(offset, tempkey);
+          rc = newinterior.SetPtr(offset, tempptr);
+          offset++;
+        }
+        //don't forget that one dangling pointer
+        rc = parent.GetPtr(offset, tempptr);
+        rc = newinterior.SetPtr(0, tempptr);
+        parent.info.numkeys = numleftkeys;
+        newinterior.info.numkeys = numrightkeys;
+
+        //figure out where the key and ptr go (old root or newinterior)
+        rc = parent.GetKey(parent.info.numkeys, tempkey);
+        if(key < testkey) {
+          //put into parent
+          parent.info.numkeys += 1;
+          //find offset of first key that is larger than key
+          for(offset = 0; offset < parent.info.numkeys - 1; offset++){
+            rc = parent.GetKey(offset, tempkey);
+            if(key < tempkey) {break;}
+          }
+          //now offset is where we should put key
+          //shift key ptrs to the right but don't forget dangling pointer
+          rc = parent.GetPtr(parent.info.numkeys, tempptr);
+          rc = parent.SetPtr(parent.info.numkeys + 1, tempptr);
+          for(reverseoffset = parent.info.numkeys; reverseoffset> offset; reverseoffset--) {
+            //do stuff
+            rc = parent.GetPtr(reverseoffset-1, tempptr);
+            rc = parent.GetKey(reverseoffset-1, tempkey);
+            rc = parent.SetPtr(reverseoffset, tempptr);
+            rc = parent.SetKey(reverseoffset, tempkey);
+          }
+          rc = parent.SetKey(offset, key);
+          rc = parent.SetPtr(offset, ptr);
+        } else {
+          //put in new interior
+          newinterior.info.numkeys += 1;
+          for(offset = 0; offset < newinterior.info.numkeys; offset++){
+            rc = newinterior.GetKey(offset,tempkey);
+            if(key< tempkey) {break;}
+          }
+          
+          rc = newinterior.GetPtr(newinterior.info.numkeys, tempptr);
+          rc = newinterior.SetPtr(newinterior.info.numkeys + 1, tempptr);
+          for(reverseoffset = newinterior.info.numkeys; reverseoffset > offset; reverseoffset--){
+            rc = newinterior.GetPtr(reverseoffset-1, tempptr);
+            rc = newinterior.GetKey(reverseoffset-1, tempkey);
+            rc = newinterior.SetKey(reverseoffset, tempkey);
+            rc = newinterior.SetPtr(reverseoffset, tempptr);
+          }
+          rc = newinterior.SetKey(offset,key);
+          rc = newinterior.SetPtr(offset,ptr);
+        }
+
+        //root node contains one key, which is the largest key of parent
+        rc = parent.GetKey(parent.info.numkeys, tempkey);
+        newroot.info.numkeys = 1;
+        newroot.SetKey(0, tempkey);
+        newroot.SetPtr(0, parentptr);
+        newroot.SetPtr(1, newnode);        
+
+        parent.info.nodetype = BTREE_INTERIOR_NODE;
         
         //make sure to change the thing to a interior before serializing
-        return ERROR_UNIMPL;
+        parent.Serialize(buffercache, parentptr);
+        newroot.Serialize(buffercache,newrootptr);
+        newinterior.Serialize(buffercache, newnode);
+        //also set new root
+        superblock.info.rootnode = newrootptr;
+        superblock.Serialize(buffercache, 0);
+        return ERROR_NOERROR;
      } else {
         BTreeNode newinterior(BTREE_INTERIOR_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
         rc = AllocateNode(newnode);
@@ -619,7 +699,7 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
         }
         //theres also one dangling pointer
         rc = parent.GetPtr(offset, tempptr);
-        rc = newinterior.SetPtr(offset, tempptr);
+        rc = newinterior.SetPtr(0, tempptr);
         parent.info.numkeys = numleftkeys;
         newinterior.info.numkeys = numrightkeys;
 
@@ -702,7 +782,7 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
      parent.Serialize(buffercache,parentptr);
      //now insert the new pointer and serialize the node.
      
-     return ERROR_UNIMPL;
+     return ERROR_NOERROR;
    } 
    return ERROR_INSANE;
 }
@@ -798,6 +878,7 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
   if (display_type==BTREE_DEPTH_DOT) { 
     o << "}\n";
   }
+  SanityCheck();
   return ERROR_NOERROR;
 }
 
@@ -805,14 +886,112 @@ ERROR_T BTreeIndex::Display(ostream &o, BTreeDisplayType display_type) const
 ERROR_T BTreeIndex::SanityCheck() const
 {
   // WRITE ME
-  return ERROR_UNIMPL;
+  /*/invariants
+  //1. every path from root to leaf is same length
+  //2. if node has n children, it has n-1 keys
+  //3. every node cept root is at LEAST half full
+  //4. elements stored in subtree must have key values that are between keys in parent node
+  //5. root has at least two children if it is not a leaf
+ //Start with rootnode and check if it is empty (aka first insert)
+  root.Unserialize(buffercache, superblock.info.rootnode); 
+  if(root.info.keysize == 0){
+     cout << "NOTHING IN THE ROOT BRUH" << endl;
+  }else{
+     cout << "we got someting in the root commander" << endl;
+     root.isBalanced(root,i,height,max_height );
+  }
+*/
+//  BTreeNode root(BTREE_ROOT_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+  //root.Unserialize(buffercache, superblock.info.rootnode);
+  ERROR_T rc;
+  rc = SanityCheckHelper(superblock.info.rootnode);
+  return rc;
 }
-  
+ 
+ERROR_T BTreeIndex::SanityCheckHelper(const SIZE_T &node) const{
+   cout << "helper" << endl;
+
+   ERROR_T rc;
+   SIZE_T offset = 0;
+   SIZE_T tree_ptr;
+   BTreeNode n;
+   KEY_T k1,k2;
+   VALUE_T val;
+
+   rc = n.Unserialize(buffercache,node);
+   if( rc != ERROR_NOERROR){
+       return rc;
+   }
+
+   //switch statements to check for type of node
+   switch(n.info.nodetype){
+        case BTREE_INTERIOR_NODE:{
+                for(offset; offset<n.info.numkeys+1;offset++){
+                        rc=n.GetKey(offset,k1);
+                        if(rc){
+                                return rc;
+                        }
+                        if(offset+1 < n.info.numkeys-1){
+                                rc = n.GetKey(offset+1,k2);
+                                if(k2 < k1){
+                                        //keys not in order
+                                }
+                        }
+                        rc = n.GetPtr(offset,tree_ptr);
+                        if(rc) {
+                                return rc;
+                        }
+                        //recurse
+                        return SanityCheckHelper(tree_ptr);
+                }
+
+                if(n.info.numkeys <= 0){
+                        return ERROR_NONEXISTENT;
+                }else{
+                        rc = n.GetPtr(n.info.numkeys,tree_ptr);
+                        if(rc){
+                                return rc;
+                        }
+                        //recurse
+                        return SanityCheckHelper(tree_ptr);
+                }
+                break;
+        }
+        case BTREE_LEAF_NODE:{
+		for(offset; offset<n.info.numkeys;offset++){
+			rc=n.GetKey(offset,k1);
+			if(rc){
+				return rc;
+			}
+			rc=n.GetVal(offset,val);
+			if(rc){
+				return rc;
+			}
+			if(offset+1 < n.info.numkeys){
+				rc=n.GetKey(offset+1,k2);
+				if(k2<k1){
+					//keys not in order
+				}
+	
+			}
+		}break;
+	}
+        case BTREE_ROOT_NODE:{}
+        default:
+                return ERROR_INSANE;
+                break;
+
+
+   }
+        return ERROR_NOERROR;
+}
 
 
 ostream & BTreeIndex::Print(ostream &os) const
 {
   // WRITE ME
+  ERROR_T rc;
+  rc = Display(os, BTREE_DEPTH_DOT);
   return os;
 }
 

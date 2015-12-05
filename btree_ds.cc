@@ -300,9 +300,68 @@ ERROR_T BTreeNode::SetKeyVal(const SIZE_T offset, const KeyValuePair &p)
     return SetVal(offset,p.value);
   }
 }
+/*
+ERROR_T BTreeNode::SanityCheckHelper(const SIZE_T &node) const{
+   cout << "helper" << endl;
+   
+   ERROR_T rc;
+   SIZE_T offset = 0;
+   SIZE_T tree_ptr;
+   BTreeNode n;
+   KEY_T k1,k2;
+   VALUE_T val;
+   
+   rc = n.Unserialize(buffercache,node);
+   if( rc != ERROR_NOERROR){
+       return rc;
+   }
+   
+   //switch statements to check for type of node
+   switch(n.info.nodetype){
+	case BTREE_INTERIOR_NODE:{
+		for(offset; offset<b.info.numkeys+1;offset++){	
+			rc=b.GetKey(offset,k1);
+			if(rc){
+				return rc;
+			}
+			if(offset+1 < b.info.numkeys-1){
+				rc = b.GetKey(offset+1,k2);
+				if(k2 < k1){
+					//keys not in order
+				}
+			}
+			rc = b.GetPtr(offset,tree_ptr);
+			if(rc) {
+				return rc;
+			}
+			//recurse
+			return SanityCheckHelper(tree_ptr);
+		}
+		
+		if(b.info.numkeys <= 0){
+			cout << "KEYS NO EXIST IM HERE" << ENDL;
+			return ERROR_NONEXISTENT;
+		}else{
+			rc = b.GetPtr(b.info.numkeys,tree_ptr);
+			if(rc){
+				return rc;
+			}
+			//recurse
+			return SanityCheckHelper(tree_ptr);
+		}
+		break;
+	}
+	case BTREE_LEAF_NODE:{}
+	case BTREE_ROOT_NODE:{}
+	default:
+		return ERROR_INSANE;
+		break;
 
 
-
+   }
+	return ERROR_NOERROR;
+}
+*/
 
 ostream & BTreeNode::Print(ostream &os) const 
 {
