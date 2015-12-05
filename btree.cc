@@ -577,22 +577,104 @@ ERROR_T BTreeIndex::Upsert(const SIZE_T &ptr, const KEY_T &key, std::stack<SIZE_
 {
    ERROR_T rc;
    BTreeNode parent;
-   SIZE_T counter, reverseoffset, tempptr, parentptr, numleftkeys, numrightkeys;
-   KEY_T testkey, tempkey;
+   SIZE_T offset, counter, reverseoffset, tempptr, parentptr, numleftkeys, numrightkeys, newnode, newrootptr;
+   KEY_T testkey, tempkey, newkey, largestkeyofparent;
 
 
    parentptr = traversed.top();
+   traversed.pop(); //remove node from stack
    parent.Unserialize(buffercache,parentptr);
    //first find out if the parent is full or not.
    if (parent.info.numkeys >= parent.info.GetNumSlotsAsInterior()){
      if(parent.info.nodetype == BTREE_ROOT_NODE) {
+        //need to make a new root node for upsert purposes
+        BTreeNode newroot(BTREE_ROOT_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+        BTreeNode newinterior(BTREE_INTERIOR_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+        rc = AllocateNode(newnode);
+        if (rc != ERROR_NOERROR) {return rc;}
+        
+        
+        
+        //make sure to change the thing to a interior before serializing
         return ERROR_UNIMPL;
-        //return ERROR_UNIMPL;
-        //chances are that we have already serialized the nodes, so its too late to throw a normal error
      } else {
+        BTreeNode newinterior(BTREE_INTERIOR_NODE, superblock.info.keysize, superblock.info.valuesize, buffercache->GetBlockSize());
+        rc = AllocateNode(newnode);
+        if(rc!=ERROR_NOERROR) {return rc;}
+        newinterior.Unserialize(buffercache, newnode);
         //we need to split keys and pointers
         numleftkeys = parent.info.numkeys / 2;
-        return ERROR_UNIMPL;
+        numrightkeys = parent.info.numkeys - numleftkeys;
+
+        //move all the key pointers from right split onwards from parent to 
+        newinterior.info.numkeys = numrightkeys;
+        offset = 0;
+        for(counter = numleftkeys + 1; counter < parent.info.numkeys; counter++){
+          //move the keys and pointers over
+          rc = parent.GetKey(counter, tempkey);
+          rc = parent.GetPtr(counter, tempptr);
+          rc = newinterior.SetKey(offset, tempkey);
+          rc = newinterior.SetPtr(offset, tempptr);
+          offset++;
+        }
+        //theres also one dangling pointer
+        rc = parent.GetPtr(offset, tempptr);
+        rc = newinterior.SetPtr(offset, tempptr);
+        parent.info.numkeys = numleftkeys;
+        newinterior.info.numkeys = numrightkeys;
+
+
+        //findout where to put the key ptr pair, old node or new node?
+        rc = parent.GetKey(parent.info.numkeys,testkey);
+        if(key < testkey) {
+          //put into parent
+          parent.info.numkeys += 1;
+          //find the offset of the first key that is larger than key
+          for(offset = 0; offset < parent.info.numkeys - 1; offset++) {
+            rc = parent.GetKey(offset, tempkey);
+            if(key < tempkey) {break;}
+          }
+          //now offset contains where we should put the key
+          //so we shift key ptrs to the right, but don't forget dangling pointer
+          rc = parent.GetPtr(parent.info.numkeys, tempptr);
+          rc = parent.SetPtr(parent.info.numkeys + 1, tempptr); 
+          for(reverseoffset = parent.info.numkeys; reverseoffset > offset; reverseoffset--){
+            rc = parent.GetPtr(reverseoffset-1, tempptr);
+            rc = parent.GetKey(reverseoffset-1, tempkey);
+            rc = parent.SetPtr(reverseoffset, tempptr);
+            rc = parent.SetKey(reverseoffset, tempkey);
+          }
+
+          //insert the key and ptr to offset
+          rc = parent.SetKey(offset, key);
+          rc = parent.SetPtr(offset, ptr);
+        } else {
+          //put into new interior
+          newinterior.info.numkeys += 1;
+          //find the offset of the first key that is larger than key
+          for(offset = 0; offset < parent.info.numkeys - 1; offset++) {
+            rc = newinterior.GetKey(offset, tempkey);
+            if(key < tempkey) {break;}
+          }
+          //now offset contains where we should put the key
+          //shift key ptrs to right, but don't forget dangling pointer
+          rc = newinterior.GetPtr(newinterior.info.numkeys, tempptr);
+          rc = newinterior.SetPtr(newinterior.info.numkeys + 1, tempptr);
+          for(reverseoffset = newinterior.info.numkeys; reverseoffset > offset; reverseoffset--){
+            rc = newinterior.GetPtr(reverseoffset-1, tempptr);
+            rc = newinterior.GetKey(reverseoffset-1, tempkey);
+            rc = newinterior.SetKey(reverseoffset, tempkey);
+            rc = newinterior.SetPtr(reverseoffset, tempptr);
+          }
+          rc = newinterior.SetKey(offset,key);
+          rc = newinterior.SetPtr(offset,ptr); 
+        }
+
+        parent.Serialize(buffercache,parentptr);
+        newinterior.Serialize(buffercache,newnode);
+        
+        rc = parent.GetKey(parent.info.numkeys, largestkeyofparent); 
+        return Upsert(newnode, largestkeyofparent, traversed);
      }
    } else {
      //not full, so we just find out where to stick the pointer and the key
